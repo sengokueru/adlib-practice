@@ -87,6 +87,9 @@
   .customTs input[type=number] { width:52px; }
   .customTs .slash { font-size:20px; color:rgba(255,255,255,.5); padding-bottom:4px; }
   .customTs select { padding:5px; border-radius:4px; border:none; }
+  .soundRow { display:flex; justify-content:center; gap:18px; color:rgba(255,255,255,.85); font-size:12.5px; margin-bottom:14px; }
+  .soundRow label { display:flex; align-items:center; gap:6px; }
+  .soundRow input { accent-color:#E4A93B; }
   .btnRow { display:flex; gap:8px; }
   .btnRow button { border:none; border-radius:3px; padding:12px 14px; font-size:14px; font-weight:700; }
   #playBtn { flex:1; background:#E4A93B; color:#20242B; }
@@ -186,6 +189,11 @@
       </label>
     </div>
     <div class="feelHint" id="feelHint"></div>
+    <div class="soundRow">
+      <label><input type="checkbox" id="clickChk" checked> クリック</label>
+      <label><input type="checkbox" id="chordChk"> コード音</label>
+      <label><input type="checkbox" id="scaleChk"> スケール音</label>
+    </div>
     <div class="btnRow">
       <button id="playBtn">▶ 開始</button>
       <button id="tapBtn">TAP</button>
@@ -261,8 +269,21 @@ let cats={diatonic:true,secondary:true,subs:false,minorii:false};
 let current=ENTRIES[0], lastId=ENTRIES[0].id;
 let bpm=96, ts=TSIGS["4/4"], barsPerChord=2, autoAdv=true, playing=false;
 let feel="just", feelMs=20; // ノリ: just/ahead(前)/behind(後) とズレ幅
-let clickLoop=null, chordLoop=null, hi=null, lo=null, guide=null;
+let clickOn=true, chordSoundOn=false, scaleSoundOn=false; // サウンドレイヤー
+let clickLoop=null, chordLoop=null, barLoop=null, hi=null, lo=null, guide=null, chordSynth=null, scaleSynth=null;
 let tapTimes=[];
+
+// コードタイプ→構成音(ルートからの半音数)
+const CHORD_IV={maj7:[0,4,7,11],m7:[0,3,7,10],"7":[0,4,7,10],m7b5:[0,3,6,10],dim7:[0,3,6,9],mMaj7:[0,3,7,11]};
+function chordFreqs(){
+  const k=KEYS[keyIndex];
+  const rootMidi=48+((k.pc+current.cr)%12);
+  return CHORD_IV[current.ct].map(v=>Tone.Frequency(rootMidi+v,"midi"));
+}
+function scaleFreqs(){
+  const k=KEYS[keyIndex], s=SCALES[current.sc], scaleRoot=(k.pc+current.sr)%12;
+  return [...s.iv,12].map(v=>Tone.Frequency(60+scaleRoot+v,"midi"));
+}
 
 function groupStarts(){
   const gs=new Set();
@@ -417,6 +438,9 @@ function updateFeelHint(){
 }
 $("feelSel").onchange=e=>{feel=e.target.value; updateFeelHint();};
 $("feelAmt").onchange=e=>{feelMs=+e.target.value; updateFeelHint();};
+$("clickChk").onchange=e=>{clickOn=e.target.checked;};
+$("chordChk").onchange=e=>{chordSoundOn=e.target.checked;};
+$("scaleChk").onchange=e=>{scaleSoundOn=e.target.checked;};
 $("barsSel").onchange=e=>{barsPerChord=+e.target.value; if(playing&&autoAdv){restartChordLoop();}};
 $("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing){ if(autoAdv) restartChordLoop(); else if(chordLoop){chordLoop.dispose();chordLoop=null;} }};
 $("keySel").onchange=e=>{keyIndex=+e.target.value; renderCard();};
@@ -444,30 +468,47 @@ function start(){
   hi=new Tone.Synth({oscillator:{type:"triangle"},envelope:env}).toDestination(); hi.volume.value=-8;
   lo=new Tone.Synth({oscillator:{type:"triangle"},envelope:env}).toDestination(); lo.volume.value=-4;
   guide=new Tone.Synth({oscillator:{type:"square"},envelope:env}).toDestination(); guide.volume.value=-22;
+  chordSynth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},envelope:{attack:0.02,decay:0.2,sustain:0.5,release:0.4}}).toDestination();
+  chordSynth.volume.value=-14;
+  scaleSynth=new Tone.Synth({oscillator:{type:"triangle"},envelope:{attack:0.005,decay:0.15,sustain:0.2,release:0.15}}).toDestination();
+  scaleSynth.volume.value=-11;
   const gs=groupStarts();
   let beat=0;
   clickLoop=new Tone.Loop(time=>{
     const b=beat%ts.b, down=b===0, grp=gs.has(b);
     // ノリ: ガイド音は正拍、クリックは±feelMsずらす(Loopのlookahead≈100ms内なので負方向も安全)
     const off=feel==="ahead"?-feelMs/1000:feel==="behind"?feelMs/1000:0;
-    if(off!==0) guide.triggerAttackRelease("C6","64n",time);
-    const t=time+off;
-    (down?lo:hi).triggerAttackRelease(down?"C5":grp?"G5":"E5","32n",t,grp?1:0.6);
+    if(clickOn){
+      if(off!==0) guide.triggerAttackRelease("C6","64n",time);
+      (down?lo:hi).triggerAttackRelease(down?"C5":grp?"G5":"E5","32n",time+off,grp?1:0.6);
+    }
     Tone.Draw.schedule(()=>{
       [...$("beats").children].forEach((d,i)=>{
         d.className=(gs.has(i)?"dot":"dot sub")+(i===b?(b===0?" down":" on"):"");
       });
-    },t);
+    },time+off);
     beat++;
   },Math.round(Tone.Transport.PPQ*4/ts.u)+"i").start(0);
+  // コード音・スケール音: 小節単位で再生(トグルは毎小節評価するので再生中の切替も即反映)
+  barLoop=new Tone.Loop(time=>{
+    const barDur=Tone.Time("1m").toSeconds();
+    if(chordSoundOn) chordSynth.triggerAttackRelease(chordFreqs(),barDur*0.9,time);
+    if(scaleSoundOn){
+      const fs=scaleFreqs(), step=barDur/fs.length;
+      fs.forEach((f,i)=>scaleSynth.triggerAttackRelease(f,step*0.85,time+i*step));
+    }
+  },"1m").start(0);
   if(autoAdv) restartChordLoop();
   Tone.Transport.start();
 }
 function stop(){
   if(clickLoop){clickLoop.dispose();clickLoop=null;}
   if(chordLoop){chordLoop.dispose();chordLoop=null;}
+  if(barLoop){barLoop.dispose();barLoop=null;}
   if(hi){hi.dispose();hi=null;} if(lo){lo.dispose();lo=null;}
   if(guide){guide.dispose();guide=null;}
+  if(chordSynth){chordSynth.dispose();chordSynth=null;}
+  if(scaleSynth){scaleSynth.dispose();scaleSynth=null;}
   Tone.Transport.stop(); Tone.Transport.cancel();
   renderBeats();
 }
