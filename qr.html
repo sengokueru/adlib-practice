@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>スマホでアクセス — QRコード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { background:#EDE7D3; font-family:Georgia,"Hiragino Mincho ProN",serif; color:#20242B;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+  .card { background:#F5EFDD; border:1px solid #E3D9BC; border-radius:4px; padding:28px 32px;
+          text-align:center; box-shadow:0 12px 32px rgba(32,36,43,.18); }
+  h1 { font-size:18px; margin:0 0 6px; }
+  p { font-family:system-ui,sans-serif; font-size:12px; color:#5A6070; margin:4px 0 16px; }
+  #qr { display:flex; justify-content:center; padding:12px; background:#fff; border-radius:4px; }
+  input { width:100%; box-sizing:border-box; margin-top:16px; padding:8px; font-size:13px;
+          font-family:ui-monospace,Menlo,monospace; border:1px solid #E3D9BC; border-radius:4px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>スマホでアプリを開く</h1>
+  <p>同じWi-Fiに接続したスマホのカメラで読み取ってください</p>
+  <div id="qr"></div>
+  <input id="url" value="">
+</div>
+<script>
+// このページを開いたホスト名を使ってアプリのURLを組み立てる(localhostで開いた場合はLAN IPに読み替え)
+const defaultUrl = "http://" + (["localhost","127.0.0.1"].includes(location.hostname) ? "192.168.0.69" : location.hostname)
+                 + ":" + (location.port || 80) + "/";
+const box = document.getElementById("qr"), input = document.getElementById("url");
+input.value = defaultUrl;
+function draw(){ box.innerHTML = ""; new QRCode(box, { text: input.value, width: 240, height: 240 }); }
+input.addEventListener("change", draw);
+draw();
+</script>
+</body>
+</html>

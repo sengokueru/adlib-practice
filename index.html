@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#20242B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>アドリブ練習 — コード&スケール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    background:#EDE7D3;
+    font-family: Georgia, "Times New Roman", "Hiragino Mincho ProN", serif;
+    display:flex; align-items:center; justify-content:center;
+    padding:12px;
+    color:#20242B;
+  }
+  .card {
+    width:100%; max-width:430px;
+    background:#F5EFDD;
+    border:1px solid #E3D9BC;
+    box-shadow:0 12px 32px rgba(32,36,43,.18);
+    overflow:hidden; border-radius:4px;
+  }
+  /* header */
+  .hdr {
+    padding:18px 18px 14px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid #E3D9BC;
+    background-image: repeating-linear-gradient(to bottom, transparent 0 7px, rgba(32,36,43,.10) 7px 8px);
+    background-position:0 20px; background-size:100% 40px; background-repeat:no-repeat;
+  }
+  .hdr .eyebrow { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:#5A6070; font-family:system-ui,sans-serif; }
+  .hdr h1 { font-size:19px; }
+  .hdr h1 .clef { font-size:26px; vertical-align:-3px; }
+  select, option { font-family:system-ui,sans-serif; }
+  #keySel { font-size:14px; padding:6px 8px; border:1px solid #E3D9BC; border-radius:4px; background:#fff; }
+
+  /* flash card */
+  .flash { text-align:center; padding:26px 18px; transition:background .25s; }
+  .badge {
+    display:inline-block; font-family:system-ui,sans-serif; font-size:12px; font-weight:600;
+    padding:3px 8px; margin-bottom:14px; background:#fff; border-radius:2px; border:1px solid currentColor;
+  }
+  .chord { font-size:60px; font-weight:700; letter-spacing:-1px; line-height:1.05; }
+  .scaleName { margin-top:8px; font-size:19px; font-family:system-ui,sans-serif; font-weight:600; }
+  .scaleNotes { margin-top:6px; font-size:14px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.06em; color:#5A6070; }
+  .chNote { color:#7A4A00; font-weight:700; background:rgba(228,169,59,.4); border-radius:2px; padding:0 3px; }
+  .notation { margin-top:14px; }
+  .notation svg { width:100%; height:auto; display:block; }
+  .chLabel { margin-top:4px; font-family:system-ui,sans-serif; font-size:12px; color:#5A6070; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .chLabel .chDot { width:10px; height:10px; border-radius:50%; background:#E4A93B; border:1px solid #20242B; flex:none; }
+
+  /* metronome */
+  .metro { background:#20242B; padding:16px 18px 18px; font-family:system-ui,sans-serif; }
+  .beats { display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:14px; }
+  .beats .dot { width:13px; height:13px; border-radius:50%; background:rgba(255,255,255,.18); transition:background .05s; }
+  .beats .dot.sub { width:8px; height:8px; }
+  .beats .dot.on { background:#EDEBE2; }
+  .beats .dot.down { background:#E4A93B; }
+  .bpmRow { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:10px; }
+  .bpmRow button {
+    width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.25);
+    background:transparent; color:rgba(255,255,255,.85); font-size:18px;
+  }
+  #bpmVal { font-family:ui-monospace,Menlo,monospace; font-size:34px; color:#fff; width:90px; text-align:center; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; margin-bottom:14px; accent-color:#E4A93B; }
+  .opts { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; color:rgba(255,255,255,.8); font-size:12px; margin-bottom:14px; }
+  .opts label { display:flex; flex-direction:column; gap:4px; }
+  .opts select { padding:5px; border-radius:4px; border:none; }
+  .opts .chk { flex-direction:row; align-items:center; gap:8px; margin-top:18px; }
+  .feelHint { color:rgba(255,255,255,.55); font-size:11px; text-align:center; margin:-6px 0 12px; min-height:14px; }
+  .customTs { display:flex; align-items:flex-end; gap:8px; color:rgba(255,255,255,.8); font-size:12px; margin:-6px 0 14px; }
+  .customTs label { display:flex; flex-direction:column; gap:4px; }
+  .customTs .grp { flex:1; }
+  .customTs input { padding:5px; border-radius:4px; border:none; width:100%; font-size:13px; }
+  .customTs input[type=number] { width:52px; }
+  .customTs .slash { font-size:20px; color:rgba(255,255,255,.5); padding-bottom:4px; }
+  .customTs select { padding:5px; border-radius:4px; border:none; }
+  .btnRow { display:flex; gap:8px; }
+  .btnRow button { border:none; border-radius:3px; padding:12px 14px; font-size:14px; font-weight:700; }
+  #playBtn { flex:1; background:#E4A93B; color:#20242B; }
+  #playBtn.playing { background:#8A3B3B; color:#fff; }
+  #tapBtn, #nextBtn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.3); font-weight:600; }
+
+  /* filters */
+  .filters { padding:14px 18px 18px; display:flex; flex-wrap:wrap; gap:8px; font-family:system-ui,sans-serif; }
+  .filters button {
+    font-size:12px; font-weight:600; padding:6px 10px; border-radius:2px; background:#fff; border:1.5px solid;
+  }
+  .filters button.on { color:#fff !important; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="hdr">
+    <div>
+      <div class="eyebrow">Ad-lib Practice</div>
+      <h1><span class="clef">𝄞</span> コード & スケール</h1>
+    </div>
+    <select id="keySel"></select>
+  </div>
+
+  <div class="flash" id="flash">
+    <div class="badge" id="badge"></div>
+    <div class="chord" id="chord"></div>
+    <div class="scaleName" id="scaleName"></div>
+    <div class="scaleNotes" id="scaleNotes"></div>
+    <div class="notation">
+      <div id="staffWrap"></div>
+      <div id="tabWrap"></div>
+      <div class="chLabel"><span class="chDot"></span><span id="chLabel"></span></div>
+    </div>
+  </div>
+
+  <div class="metro">
+    <div class="beats" id="beats"></div>
+    <div class="bpmRow">
+      <button id="bpmDown">−</button>
+      <div id="bpmVal">96</div>
+      <button id="bpmUp">＋</button>
+    </div>
+    <input type="range" id="bpmSlider" min="30" max="300" value="96">
+    <div class="opts">
+      <label>拍子
+        <select id="tsSel">
+          <option value="2/4">2/4</option><option value="3/4">3/4</option>
+          <option value="4/4" selected>4/4</option><option value="5/4">5/4</option>
+          <option value="6/4">6/4</option><option value="7/4">7/4</option>
+          <option value="5/8">5/8 (3+2)</option><option value="6/8">6/8 (3+3)</option>
+          <option value="7/8">7/8 (2+2+3)</option><option value="9/8">9/8 (3+3+3)</option>
+          <option value="12/8">12/8</option>
+          <option value="custom">カスタム…</option>
+        </select>
+      </label>
+      <label>小節/コード
+        <select id="barsSel">
+          <option value="1">1</option><option value="2" selected>2</option>
+          <option value="4">4</option><option value="8">8</option>
+        </select>
+      </label>
+      <label class="chk"><input type="checkbox" id="autoChk" checked> 自動進行</label>
+      <label>ノリ
+        <select id="feelSel">
+          <option value="just" selected>ジャスト</option>
+          <option value="ahead">前ノリ</option>
+          <option value="behind">後ノリ</option>
+        </select>
+      </label>
+      <label>ノリ幅
+        <select id="feelAmt">
+          <option value="10">10ms</option>
+          <option value="20" selected>20ms</option>
+          <option value="40">40ms</option>
+        </select>
+      </label>
+    </div>
+    <div class="customTs" id="customTs" style="display:none">
+      <label>分子
+        <input type="number" id="ctsNum" min="1" max="24" value="8">
+      </label>
+      <span class="slash">/</span>
+      <label>分母
+        <select id="ctsDen">
+          <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+          <option value="5">5</option><option value="6" selected>6</option><option value="7">7</option>
+          <option value="8">8</option><option value="9">9</option><option value="10">10</option>
+          <option value="12">12</option><option value="16">16</option>
+        </select>
+      </label>
+      <label class="grp">アクセント
+        <input type="text" id="ctsGrp" placeholder="例: 3+3+2(任意)" inputmode="numeric">
+      </label>
+    </div>
+    <div class="feelHint" id="feelHint"></div>
+    <div class="btnRow">
+      <button id="playBtn">▶ 開始</button>
+      <button id="tapBtn">TAP</button>
+      <button id="nextBtn">次のコード</button>
+    </div>
+  </div>
+
+  <div class="filters" id="filters"></div>
+</div>
+
+<script>
+// ---------- theory data ----------
+// ch: 特徴音(スケールルートからの半音数) / chJa: 説明ラベル
+const SCALES = {
+  ionian:{iv:[0,2,4,5,7,9,11],ja:"アイオニアン",ch:[5],chJa:"完全4度(コード上ではアヴォイド気味)"},
+  dorian:{iv:[0,2,3,5,7,9,10],ja:"ドリアン",ch:[9],chJa:"長6度(13th)"},
+  phrygian:{iv:[0,1,3,5,7,8,10],ja:"フリジアン",ch:[1],chJa:"短2度(♭9)"},
+  lydian:{iv:[0,2,4,6,7,9,11],ja:"リディアン",ch:[6],chJa:"増4度(♯11)"},
+  mixolydian:{iv:[0,2,4,5,7,9,10],ja:"ミクソリディアン",ch:[10],chJa:"短7度(♭7)"},
+  aeolian:{iv:[0,2,3,5,7,8,10],ja:"エオリアン",ch:[8],chJa:"短6度(♭13)"},
+  locrian:{iv:[0,1,3,5,6,8,10],ja:"ロクリアン",ch:[1,6],chJa:"短2度(♭9)と減5度(♭5)"},
+  harmonicMinor:{iv:[0,2,3,5,7,8,11],ja:"ハーモニックマイナー",ch:[8,11],chJa:"♭6と♮7(間の増2度が特徴)"},
+  melodicMinor:{iv:[0,2,3,5,7,9,11],ja:"メロディックマイナー",ch:[9,11],chJa:"♮6と♮7(上行形)"},
+  locrianNat2:{iv:[0,2,3,5,6,8,10],ja:"ロクリアン♮2",ch:[2,6],chJa:"♮9(ロクリアンとの違い)と♭5"},
+  altered:{iv:[0,1,3,4,6,8,10],ja:"オルタード",ch:[1,3,6,8],chJa:"♭9・♯9・♯11・♭13(オルタードテンション)"},
+  lydianDominant:{iv:[0,2,4,6,7,9,10],ja:"リディアン7th",ch:[6,10],chJa:"♯11と♭7"},
+  wholeHalfDim:{iv:[0,2,3,5,6,8,9,11],ja:"コンビネーションディミニッシュ",ch:[2,5,8,11],chJa:"9・11・♭13・♮7(コードトーン間のテンション)"},
+};
+const SUF={maj7:"maj7",m7:"m7","7":"7",m7b5:"m7♭5",dim7:"°7",mMaj7:"m(maj7)"};
+const ENTRIES=[
+  {id:"I",roman:"Ⅰ△7",cr:0,ct:"maj7",sr:0,sc:"ionian",cat:"diatonic"},
+  {id:"ii",roman:"ⅱm7",cr:2,ct:"m7",sr:2,sc:"dorian",cat:"diatonic"},
+  {id:"iii",roman:"ⅲm7",cr:4,ct:"m7",sr:4,sc:"phrygian",cat:"diatonic"},
+  {id:"IV",roman:"Ⅳ△7",cr:5,ct:"maj7",sr:5,sc:"lydian",cat:"diatonic"},
+  {id:"V",roman:"Ⅴ7",cr:7,ct:"7",sr:7,sc:"mixolydian",cat:"diatonic"},
+  {id:"vi",roman:"ⅵm7",cr:9,ct:"m7",sr:9,sc:"aeolian",cat:"diatonic"},
+  {id:"vii",roman:"ⅶø7",cr:11,ct:"m7b5",sr:11,sc:"locrian",cat:"diatonic"},
+  {id:"V7ii",roman:"Ⅴ7/ⅱ",cr:9,ct:"7",sr:9,sc:"mixolydian",cat:"secondary"},
+  {id:"V7iii",roman:"Ⅴ7/ⅲ",cr:11,ct:"7",sr:11,sc:"mixolydian",cat:"secondary"},
+  {id:"V7IV",roman:"Ⅴ7/Ⅳ (=Ⅰ7)",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"secondary"},
+  {id:"V7V",roman:"Ⅴ7/Ⅴ",cr:2,ct:"7",sr:2,sc:"mixolydian",cat:"secondary"},
+  {id:"V7vi",roman:"Ⅴ7/ⅵ",cr:4,ct:"7",sr:9,sc:"harmonicMinor",cat:"secondary"},
+  {id:"subV",roman:"sub Ⅴ7 (裏コード)",cr:1,ct:"7",sr:1,sc:"lydianDominant",cat:"subs"},
+  {id:"subVii",roman:"sub Ⅴ7/ⅱ (裏コード)",cr:3,ct:"7",sr:3,sc:"lydianDominant",cat:"subs"},
+  {id:"viidim",roman:"ⅶ°7 (パッシング)",cr:11,ct:"dim7",sr:11,sc:"wholeHalfDim",cat:"subs"},
+  {id:"iio",roman:"ⅱø7 (borrowed)",cr:2,ct:"m7b5",sr:2,sc:"locrianNat2",cat:"minorii"},
+  {id:"Valt",roman:"Ⅴ7alt (borrowed)",cr:7,ct:"7",sr:7,sc:"altered",cat:"minorii"},
+  {id:"imM7",roman:"ⅰm(maj7) (tonic minor)",cr:0,ct:"mMaj7",sr:0,sc:"melodicMinor",cat:"minorii"},
+];
+const KEYS=[
+  {n:"C",pc:0,f:false},{n:"G",pc:7,f:false},{n:"D",pc:2,f:false},{n:"A",pc:9,f:false},
+  {n:"E",pc:4,f:false},{n:"B",pc:11,f:false},{n:"F#",pc:6,f:false},
+  {n:"F",pc:5,f:true},{n:"B♭",pc:10,f:true},{n:"E♭",pc:3,f:true},{n:"A♭",pc:8,f:true},{n:"D♭",pc:1,f:true},
+];
+const SHARPS=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLATS=["C","D♭","D","E♭","E","F","G♭","G","A♭","A","B♭","B"];
+const nn=(pc,f)=> (f?FLATS:SHARPS)[((pc%12)+12)%12];
+const CATS={
+  diatonic:{label:"ダイアトニック",color:"#2F5C7A",bg:"#D9E6EC"},
+  secondary:{label:"セカンダリードミナント",color:"#B5651D",bg:"#F1DDB8"},
+  subs:{label:"代理・ディミニッシュ",color:"#8A3B3B",bg:"#EACFCB"},
+  minorii:{label:"マイナーⅱ-Ⅴ-ⅰ (借用)",color:"#5B4B8A",bg:"#DBD3EC"},
+};
+
+// ---------- state ----------
+// 拍子: b=1小節のパルス数, u=単位(4=四分/8=八分), g=八分系のアクセントグループ
+const TSIGS={
+  "2/4":{b:2,u:4},"3/4":{b:3,u:4},"4/4":{b:4,u:4},"5/4":{b:5,u:4},"6/4":{b:6,u:4},"7/4":{b:7,u:4},
+  "5/8":{b:5,u:8,g:[3,2]},"6/8":{b:6,u:8,g:[3,3]},"7/8":{b:7,u:8,g:[2,2,3]},"9/8":{b:9,u:8,g:[3,3,3]},"12/8":{b:12,u:8,g:[3,3,3,3]},
+};
+let keyIndex=0;
+let cats={diatonic:true,secondary:true,subs:false,minorii:false};
+let current=ENTRIES[0], lastId=ENTRIES[0].id;
+let bpm=96, ts=TSIGS["4/4"], barsPerChord=2, autoAdv=true, playing=false;
+let feel="just", feelMs=20; // ノリ: just/ahead(前)/behind(後) とズレ幅
+let clickLoop=null, chordLoop=null, hi=null, lo=null, guide=null;
+let tapTimes=[];
+
+function groupStarts(){
+  const gs=new Set();
+  if(ts.g){let a=0; ts.g.forEach(len=>{gs.add(a);a+=len;});}
+  else for(let i=0;i<ts.b;i++) gs.add(i);
+  return gs;
+}
+
+// ---------- dom ----------
+const $=id=>document.getElementById(id);
+KEYS.forEach((k,i)=>{const o=document.createElement("option");o.value=i;o.textContent="Key: "+k.n;$("keySel").appendChild(o);});
+
+Object.entries(CATS).forEach(([id,m])=>{
+  const b=document.createElement("button");
+  b.textContent=m.label; b.style.borderColor=m.color; b.dataset.cat=id;
+  b.onclick=()=>{cats[id]=!cats[id]; renderFilters();};
+  $("filters").appendChild(b);
+});
+function renderFilters(){
+  [...$("filters").children].forEach(b=>{
+    const m=CATS[b.dataset.cat], on=cats[b.dataset.cat];
+    b.classList.toggle("on",on);
+    b.style.background=on?m.color:"#fff";
+    b.style.color=on?"#fff":m.color;
+  });
+}
+renderFilters();
+
+function renderBeats(){
+  $("beats").innerHTML="";
+  const gs=groupStarts();
+  for(let i=0;i<ts.b;i++){const d=document.createElement("div");d.className=gs.has(i)?"dot":"dot sub";$("beats").appendChild(d);}
+}
+renderBeats();
+
+// ---------- notation (五線譜 / TAB譜) ----------
+const LETTERS={C:0,D:1,E:2,F:3,G:4,A:5,B:6};
+const INK="#20242B", ACCENT="#E4A93B";
+
+// 五線譜: 1オクターブ上行。ch=特徴音は琥珀色ノートヘッド+リング
+function svgStaff(notes){
+  const W=384,H=112,x0=56,sp=(W-x0-8)/notes.length;
+  let out=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for(let i=0;i<5;i++){const y=76-i*8;out+=`<line x1="6" y1="${y}" x2="${W-6}" y2="${y}" stroke="${INK}" stroke-width="1" opacity=".5"/>`;}
+  out+=`<text x="10" y="82" font-size="52" fill="${INK}">𝄞</text>`;
+  notes.forEach((n,i)=>{
+    const x=x0+sp*i+sp/2, y=76-(n.st-30)*4;
+    for(let st=28;st>=n.st;st-=2){const ly=76-(st-30)*4;out+=`<line x1="${x-9}" y1="${ly}" x2="${x+9}" y2="${ly}" stroke="${INK}" stroke-width="1" opacity=".5"/>`;}
+    for(let st=40;st<=n.st;st+=2){const ly=76-(st-30)*4;out+=`<line x1="${x-9}" y1="${ly}" x2="${x+9}" y2="${ly}" stroke="${INK}" stroke-width="1" opacity=".5"/>`;}
+    if(n.ch) out+=`<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="${ACCENT}" stroke-width="2"/>`;
+    if(n.acc) out+=`<text x="${x-15}" y="${y+4.5}" font-size="13" font-weight="700" fill="${n.ch?"#7A4A00":INK}">${n.acc}</text>`;
+    out+=`<ellipse cx="${x}" cy="${y}" rx="5.4" ry="4.1" fill="${n.ch?ACCENT:INK}" stroke="${INK}" stroke-width="1" transform="rotate(-14 ${x} ${y})"/>`;
+  });
+  return out+"</svg>";
+}
+
+// TAB譜: ルートを6弦(高フレットなら5弦)に置いたポジションボックスで割り当て
+function tabPositions(rootPc, ivs){
+  const S=[40,45,50,55,59,64]; // 低E→高e の開放弦MIDI
+  const f6=((rootPc-4)+12)%12;
+  let s0,f0;
+  if(f6<=6){s0=0;f0=f6;} else {s0=1;f0=((rootPc-9)+12)%12;}
+  const rootMidi=S[s0]+f0;
+  let str=s0;
+  return ivs.map(v=>{
+    const midi=rootMidi+v;
+    let fret=midi-S[str];
+    while(fret>f0+3&&str<5){str++;fret=midi-S[str];}
+    return {str,fret};
+  });
+}
+function svgTab(posns,notes,bg){
+  const W=384,H=72,x0=56,sp=(W-x0-8)/notes.length;
+  let out=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for(let i=0;i<6;i++){const y=8+i*10;out+=`<line x1="6" y1="${y}" x2="${W-6}" y2="${y}" stroke="${INK}" stroke-width="1" opacity=".5"/>`;}
+  ["T","A","B"].forEach((c,i)=>{out+=`<text x="16" y="${22+i*13}" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="${INK}" text-anchor="middle">${c}</text>`;});
+  posns.forEach((p,i)=>{
+    const x=x0+sp*i+sp/2, y=8+(5-p.str)*10;
+    if(notes[i].ch) out+=`<circle cx="${x}" cy="${y}" r="7.5" fill="${ACCENT}" stroke="${INK}" stroke-width="1"/>`;
+    else out+=`<rect x="${x-7}" y="${y-5.5}" width="14" height="11" fill="${bg}"/>`;
+    out+=`<text x="${x}" y="${y+3.5}" font-size="10.5" font-weight="${notes[i].ch?700:600}" font-family="ui-monospace,Menlo,monospace" fill="${INK}" text-anchor="middle">${p.fret}</text>`;
+  });
+  return out+"</svg>";
+}
+
+function renderCard(){
+  const k=KEYS[keyIndex], m=CATS[current.cat];
+  const chordRoot=nn(k.pc+current.cr,k.f);
+  const s=SCALES[current.sc], scaleRoot=(k.pc+current.sr)%12;
+  const chSet=new Set(s.ch);
+  $("flash").style.background=m.bg;
+  $("badge").textContent=current.roman+" ・ "+m.label;
+  $("badge").style.color=m.color;
+  $("chord").textContent=chordRoot+SUF[current.ct];
+  $("scaleName").textContent=nn(scaleRoot,k.f)+" "+s.ja;
+  $("scaleName").style.color=m.color;
+  $("scaleNotes").innerHTML=s.iv.map(v=>{
+    const name=nn(scaleRoot+v,k.f);
+    return chSet.has(v)?`<span class="chNote">${name}</span>`:name;
+  }).join("  ");
+  // 譜面用ノート列(1オクターブ+ルートのオクターブ音)
+  const ivs=[...s.iv,12];
+  const notes=ivs.map(v=>{
+    const midi=60+scaleRoot+v;
+    const name=nn(scaleRoot+v,k.f);
+    const acc=name.length>1?(name[1]==="#"?"♯":"♭"):"";
+    const oct=Math.floor(midi/12)-1;
+    return {midi,acc,st:oct*7+LETTERS[name[0]],ch:chSet.has(v)};
+  });
+  $("staffWrap").innerHTML=svgStaff(notes);
+  $("tabWrap").innerHTML=svgTab(tabPositions(scaleRoot,ivs),notes,m.bg);
+  $("chLabel").textContent="特徴音: "+s.chJa;
+}
+renderCard();
+
+function pickRandom(){
+  let pool=ENTRIES.filter(e=>cats[e.cat]);
+  if(pool.length===0) pool=ENTRIES;
+  let e;
+  do{ e=pool[Math.floor(Math.random()*pool.length)]; }while(pool.length>1&&e.id===lastId);
+  lastId=e.id; current=e; renderCard();
+}
+
+// ---------- metronome ----------
+// 変則分母(6,5,7等)のパルスをtick単位で整数にするため高解像度PPQにする (2520*4=10080 は 2..10,12,14,16 で割り切れる)
+Tone.Transport.PPQ=2520;
+function setBpm(v){ bpm=Math.min(300,Math.max(30,v)); $("bpmVal").textContent=bpm; $("bpmSlider").value=bpm; Tone.Transport.bpm.value=bpm; }
+$("bpmDown").onclick=()=>setBpm(bpm-1);
+$("bpmUp").onclick=()=>setBpm(bpm+1);
+$("bpmSlider").oninput=e=>setBpm(+e.target.value);
+// カスタム拍子: 分子1〜24 × 分母{2,3,4,5,6,7,8,9,10,12,16}(6=四分三連単位などの変則分母も可)
+function parseGroups(txt,b){
+  const parts=(txt||"").split("+").map(s=>parseInt(s.trim(),10)).filter(n=>n>0);
+  return (parts.length>1&&parts.reduce((a,c)=>a+c,0)===b)?parts:null;
+}
+function applyCustomTs(){
+  const b=Math.min(24,Math.max(1,+$("ctsNum").value||8)), u=+$("ctsDen").value;
+  ts={b,u,g:parseGroups($("ctsGrp").value,b)};
+  renderBeats(); if(playing){stop(); start();}
+}
+$("tsSel").onchange=e=>{
+  const custom=e.target.value==="custom";
+  $("customTs").style.display=custom?"flex":"none";
+  if(custom){applyCustomTs(); return;}
+  ts=TSIGS[e.target.value]; renderBeats(); if(playing){stop(); start();}
+};
+$("ctsNum").onchange=$("ctsDen").onchange=$("ctsGrp").onchange=()=>{ if($("tsSel").value==="custom") applyCustomTs(); };
+function updateFeelHint(){
+  $("feelHint").textContent = feel==="just" ? "" :
+    feel==="ahead" ? `前ノリ: クリックが正拍(小さなガイド音)より ${feelMs}ms 早く鳴ります`
+                   : `後ノリ: クリックが正拍(小さなガイド音)より ${feelMs}ms 遅く鳴ります`;
+}
+$("feelSel").onchange=e=>{feel=e.target.value; updateFeelHint();};
+$("feelAmt").onchange=e=>{feelMs=+e.target.value; updateFeelHint();};
+$("barsSel").onchange=e=>{barsPerChord=+e.target.value; if(playing&&autoAdv){restartChordLoop();}};
+$("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing){ if(autoAdv) restartChordLoop(); else if(chordLoop){chordLoop.dispose();chordLoop=null;} }};
+$("keySel").onchange=e=>{keyIndex=+e.target.value; renderCard();};
+$("nextBtn").onclick=pickRandom;
+
+$("tapBtn").onclick=()=>{
+  const now=performance.now();
+  tapTimes=tapTimes.filter(t=>now-t<2500); tapTimes.push(now); tapTimes=tapTimes.slice(-5);
+  if(tapTimes.length>=2){
+    let sum=0; for(let i=1;i<tapTimes.length;i++) sum+=tapTimes[i]-tapTimes[i-1];
+    const v=Math.round(60000/(sum/(tapTimes.length-1)));
+    if(v>=30&&v<=300) setBpm(v);
+  }
+};
+
+function restartChordLoop(){
+  if(chordLoop){chordLoop.dispose();chordLoop=null;}
+  chordLoop=new Tone.Loop(time=>{ Tone.Draw.schedule(pickRandom,time); }, barsPerChord+"m").start(0);
+}
+
+function start(){
+  Tone.Transport.bpm.value=bpm;
+  Tone.Transport.timeSignature=[ts.b,ts.u];
+  const env={attack:0.001,decay:0.05,sustain:0,release:0.01};
+  hi=new Tone.Synth({oscillator:{type:"triangle"},envelope:env}).toDestination(); hi.volume.value=-8;
+  lo=new Tone.Synth({oscillator:{type:"triangle"},envelope:env}).toDestination(); lo.volume.value=-4;
+  guide=new Tone.Synth({oscillator:{type:"square"},envelope:env}).toDestination(); guide.volume.value=-22;
+  const gs=groupStarts();
+  let beat=0;
+  clickLoop=new Tone.Loop(time=>{
+    const b=beat%ts.b, down=b===0, grp=gs.has(b);
+    // ノリ: ガイド音は正拍、クリックは±feelMsずらす(Loopのlookahead≈100ms内なので負方向も安全)
+    const off=feel==="ahead"?-feelMs/1000:feel==="behind"?feelMs/1000:0;
+    if(off!==0) guide.triggerAttackRelease("C6","64n",time);
+    const t=time+off;
+    (down?lo:hi).triggerAttackRelease(down?"C5":grp?"G5":"E5","32n",t,grp?1:0.6);
+    Tone.Draw.schedule(()=>{
+      [...$("beats").children].forEach((d,i)=>{
+        d.className=(gs.has(i)?"dot":"dot sub")+(i===b?(b===0?" down":" on"):"");
+      });
+    },t);
+    beat++;
+  },Math.round(Tone.Transport.PPQ*4/ts.u)+"i").start(0);
+  if(autoAdv) restartChordLoop();
+  Tone.Transport.start();
+}
+function stop(){
+  if(clickLoop){clickLoop.dispose();clickLoop=null;}
+  if(chordLoop){chordLoop.dispose();chordLoop=null;}
+  if(hi){hi.dispose();hi=null;} if(lo){lo.dispose();lo=null;}
+  if(guide){guide.dispose();guide=null;}
+  Tone.Transport.stop(); Tone.Transport.cancel();
+  renderBeats();
+}
+$("playBtn").onclick=async()=>{
+  if(!playing){ await Tone.start(); start(); playing=true; $("playBtn").textContent="■ 停止"; $("playBtn").classList.add("playing"); }
+  else { stop(); playing=false; $("playBtn").textContent="▶ 開始"; $("playBtn").classList.remove("playing"); }
+};
+
+// ---------- PWA ----------
+if("serviceWorker" in navigator && (location.protocol==="https:"||["localhost","127.0.0.1"].includes(location.hostname))){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
