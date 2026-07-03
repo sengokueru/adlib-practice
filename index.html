@@ -270,7 +270,8 @@ let current=ENTRIES[0], lastId=ENTRIES[0].id;
 let bpm=96, ts=TSIGS["4/4"], barsPerChord=2, autoAdv=true, playing=false;
 let feel="just", feelMs=20; // ノリ: just/ahead(前)/behind(後) とズレ幅
 let clickOn=true, chordSoundOn=false, scaleSoundOn=false; // サウンドレイヤー
-let clickLoop=null, chordLoop=null, barLoop=null, hi=null, lo=null, guide=null, chordSynth=null, scaleSynth=null;
+let barCount=0, lastChangeBar=0; // コード自動進行の小節カウンタ(barLoop内で更新)
+let clickLoop=null, barLoop=null, hi=null, lo=null, guide=null, chordSynth=null, scaleSynth=null;
 let tapTimes=[];
 
 // コードタイプ→構成音(ルートからの半音数)
@@ -399,13 +400,15 @@ function renderCard(){
 }
 renderCard();
 
-function pickRandom(){
+// 抽選(currentの更新)と描画を分離: オーディオスケジューリングからは pickNext を同期で呼び、描画のみ Tone.Draw に遅延させる
+function pickNext(){
   let pool=ENTRIES.filter(e=>cats[e.cat]);
   if(pool.length===0) pool=ENTRIES;
   let e;
   do{ e=pool[Math.floor(Math.random()*pool.length)]; }while(pool.length>1&&e.id===lastId);
-  lastId=e.id; current=e; renderCard();
+  lastId=e.id; current=e;
 }
+function pickRandom(){ pickNext(); renderCard(); lastChangeBar=barCount; }
 
 // ---------- metronome ----------
 // 変則分母(6,5,7等)のパルスをtick単位で整数にするため高解像度PPQにする (2520*4=10080 は 2..10,12,14,16 で割り切れる)
@@ -441,8 +444,8 @@ $("feelAmt").onchange=e=>{feelMs=+e.target.value; updateFeelHint();};
 $("clickChk").onchange=e=>{clickOn=e.target.checked;};
 $("chordChk").onchange=e=>{chordSoundOn=e.target.checked;};
 $("scaleChk").onchange=e=>{scaleSoundOn=e.target.checked;};
-$("barsSel").onchange=e=>{barsPerChord=+e.target.value; if(playing&&autoAdv){restartChordLoop();}};
-$("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing){ if(autoAdv) restartChordLoop(); else if(chordLoop){chordLoop.dispose();chordLoop=null;} }};
+$("barsSel").onchange=e=>{barsPerChord=+e.target.value;};
+$("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing&&autoAdv) lastChangeBar=barCount;};
 $("keySel").onchange=e=>{keyIndex=+e.target.value; renderCard();};
 $("nextBtn").onclick=pickRandom;
 
@@ -455,11 +458,6 @@ $("tapBtn").onclick=()=>{
     if(v>=30&&v<=300) setBpm(v);
   }
 };
-
-function restartChordLoop(){
-  if(chordLoop){chordLoop.dispose();chordLoop=null;}
-  chordLoop=new Tone.Loop(time=>{ Tone.Draw.schedule(pickRandom,time); }, barsPerChord+"m").start(0);
-}
 
 function start(){
   Tone.Transport.bpm.value=bpm;
@@ -489,21 +487,26 @@ function start(){
     },time+off);
     beat++;
   },Math.round(Tone.Transport.PPQ*4/ts.u)+"i").start(0);
-  // コード音・スケール音: 小節単位で再生(トグルは毎小節評価するので再生中の切替も即反映)
+  // 小節単位の処理をここに集約: コード進行の更新(同期)→ コード音/スケール音の再生
+  // ※コード切替を別Loop+Tone.Drawで行うと、切替小節でコード音が旧コードを鳴らす(1小節遅れ)ため必ずこの順序で行う
+  barCount=0; lastChangeBar=0;
   barLoop=new Tone.Loop(time=>{
+    if(autoAdv&&barCount>0&&barCount-lastChangeBar>=barsPerChord){
+      pickNext(); lastChangeBar=barCount;
+      Tone.Draw.schedule(renderCard,time);
+    }
     const barDur=Tone.Time("1m").toSeconds();
     if(chordSoundOn) chordSynth.triggerAttackRelease(chordFreqs(),barDur*0.9,time);
     if(scaleSoundOn){
       const fs=scaleFreqs(), step=barDur/fs.length;
       fs.forEach((f,i)=>scaleSynth.triggerAttackRelease(f,step*0.85,time+i*step));
     }
+    barCount++;
   },"1m").start(0);
-  if(autoAdv) restartChordLoop();
   Tone.Transport.start();
 }
 function stop(){
   if(clickLoop){clickLoop.dispose();clickLoop=null;}
-  if(chordLoop){chordLoop.dispose();chordLoop=null;}
   if(barLoop){barLoop.dispose();barLoop=null;}
   if(hi){hi.dispose();hi=null;} if(lo){lo.dispose();lo=null;}
   if(guide){guide.dispose();guide=null;}

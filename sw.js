@@ -1,4 +1,4 @@
-const CACHE = "adlib-v4";
+const CACHE = "adlib-v5";
 const ASSETS = [
   "./",
   "./index.html",
