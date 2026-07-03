@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#20242B">
@@ -18,6 +18,9 @@
     font-family: Georgia, "Times New Roman", "Hiragino Mincho ProN", serif;
     display:flex; align-items:center; justify-content:center;
     padding:12px;
+    /* インストール時(フルスクリーン)にステータスバー・ホームバーと重ならないようにする */
+    padding-top:calc(12px + env(safe-area-inset-top));
+    padding-bottom:calc(12px + env(safe-area-inset-bottom));
     color:#20242B;
   }
   .card {
@@ -39,7 +42,9 @@
   .hdr h1 { font-size:19px; }
   .hdr h1 .clef { font-size:26px; vertical-align:-3px; }
   select, option { font-family:system-ui,sans-serif; }
-  #keySel { font-size:14px; padding:6px 8px; border:1px solid #E3D9BC; border-radius:4px; background:#fff; }
+  .keyWrap { display:flex; flex-direction:column; gap:3px; align-items:flex-end; }
+  .keyWrap .keyLabel { font-size:10px; letter-spacing:.15em; color:#5A6070; font-family:system-ui,sans-serif; }
+  #keySel { font-size:16px; font-weight:600; padding:8px 10px; border:1.5px solid #E4A93B; border-radius:4px; background:#fff; }
 
   /* flash card */
   .flash { text-align:center; padding:26px 18px; transition:background .25s; }
@@ -103,7 +108,10 @@
       <div class="eyebrow">Ad-lib Practice</div>
       <h1><span class="clef">𝄞</span> コード & スケール</h1>
     </div>
-    <select id="keySel"></select>
+    <div class="keyWrap">
+      <span class="keyLabel">キー選択</span>
+      <select id="keySel"></select>
+    </div>
   </div>
 
   <div class="flash" id="flash">

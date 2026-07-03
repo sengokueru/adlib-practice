@@ -1,4 +1,4 @@
-const CACHE = "adlib-v2";
+const CACHE = "adlib-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,9 +22,21 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// キャッシュ優先 + 取得できたものは随時キャッシュ(オフライン動作用)
+// ページ遷移はネットワーク優先(更新を確実に反映)、その他はキャッシュ優先。オフライン時はキャッシュへフォールバック
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match("./index.html")))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(
       (hit) =>
