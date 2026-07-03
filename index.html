@@ -103,7 +103,11 @@
   #playBtn.playing { background:#8A3B3B; color:#fff; }
   #tapBtn, #nextBtn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.3); font-weight:600; }
 
-  /* filters */
+  /* progression & filters */
+  .progRow { padding:14px 18px 0; display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-family:system-ui,sans-serif; font-size:12px; color:#5A6070; }
+  .progRow select { padding:6px 8px; border:1px solid #E3D9BC; border-radius:4px; background:#fff; font-size:13px; }
+  .progRow label { display:flex; align-items:center; gap:6px; }
+  .progRow input { accent-color:#E4A93B; }
   .filters { padding:14px 18px 18px; display:flex; flex-wrap:wrap; gap:8px; font-family:system-ui,sans-serif; }
   .filters button {
     font-size:12px; font-weight:600; padding:6px 10px; border-radius:2px; background:#fff; border:1.5px solid;
@@ -208,6 +212,20 @@
     </div>
   </div>
 
+  <div class="progRow">
+    <label>進行
+      <select id="progSel">
+        <option value="random" selected>ランダム出題</option>
+        <option value="jazz251">ジャズ ⅱ-Ⅴ-Ⅰ</option>
+        <option value="minor251">マイナー ⅱ-Ⅴ-ⅰ</option>
+        <option value="blues">ブルース(12小節)</option>
+        <option value="pops">ポップス Ⅰ-Ⅴ-ⅵ-Ⅳ</option>
+        <option value="bossa">ボサノバ</option>
+        <option value="funk">ファンク(9thワンコード)</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="varietyChk" checked> スケールおまかせ(ペンタ等も出題)</label>
+  </div>
   <div class="filters" id="filters"></div>
 </div>
 
@@ -228,28 +246,75 @@ const SCALES = {
   altered:{iv:[0,1,3,4,6,8,10],ja:"オルタード",ch:[1,3,6,8],chJa:"♭9・♯9・♯11・♭13(オルタードテンション)"},
   lydianDominant:{iv:[0,2,4,6,7,9,10],ja:"リディアン7th",ch:[6,10],chJa:"♯11と♭7"},
   wholeHalfDim:{iv:[0,2,3,5,6,8,9,11],ja:"コンビネーションディミニッシュ",ch:[2,5,8,11],chJa:"9・11・♭13・♮7(コードトーン間のテンション)"},
+  majorPenta:{iv:[0,2,4,7,9],ja:"メジャーペンタ",ch:[],chJa:"なし(アヴォイド無しでどこでも安心)"},
+  minorPenta:{iv:[0,3,5,7,10],ja:"マイナーペンタ",ch:[],chJa:"なし(アヴォイド無しでどこでも安心)"},
+  blues:{iv:[0,3,5,6,7,10],ja:"ブルース",ch:[6],chJa:"♭5(ブルーノート)"},
+  halfWholeDim:{iv:[0,1,3,4,6,7,9,10],ja:"ドミナントディミニッシュ(H-W)",ch:[1,3,6,9],chJa:"♭9・♯9・♯11・13"},
 };
-const SUF={maj7:"maj7",m7:"m7","7":"7",m7b5:"m7♭5",dim7:"°7",mMaj7:"m(maj7)"};
+const SUF={maj7:"maj7",m7:"m7","7":"7",m7b5:"m7♭5",dim7:"°7",mMaj7:"m(maj7)","6":"6",m6:"m6","9":"9",m9:"m9",maj9:"maj9","7b9":"7♭9","13":"13"};
+// alts: 「スケールおまかせ」ON時に基本スケールと合わせて抽選される代替スケール
 const ENTRIES=[
-  {id:"I",roman:"Ⅰ△7",cr:0,ct:"maj7",sr:0,sc:"ionian",cat:"diatonic"},
-  {id:"ii",roman:"ⅱm7",cr:2,ct:"m7",sr:2,sc:"dorian",cat:"diatonic"},
-  {id:"iii",roman:"ⅲm7",cr:4,ct:"m7",sr:4,sc:"phrygian",cat:"diatonic"},
-  {id:"IV",roman:"Ⅳ△7",cr:5,ct:"maj7",sr:5,sc:"lydian",cat:"diatonic"},
-  {id:"V",roman:"Ⅴ7",cr:7,ct:"7",sr:7,sc:"mixolydian",cat:"diatonic"},
-  {id:"vi",roman:"ⅵm7",cr:9,ct:"m7",sr:9,sc:"aeolian",cat:"diatonic"},
-  {id:"vii",roman:"ⅶø7",cr:11,ct:"m7b5",sr:11,sc:"locrian",cat:"diatonic"},
-  {id:"V7ii",roman:"Ⅴ7/ⅱ",cr:9,ct:"7",sr:9,sc:"mixolydian",cat:"secondary"},
-  {id:"V7iii",roman:"Ⅴ7/ⅲ",cr:11,ct:"7",sr:11,sc:"mixolydian",cat:"secondary"},
-  {id:"V7IV",roman:"Ⅴ7/Ⅳ (=Ⅰ7)",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"secondary"},
-  {id:"V7V",roman:"Ⅴ7/Ⅴ",cr:2,ct:"7",sr:2,sc:"mixolydian",cat:"secondary"},
-  {id:"V7vi",roman:"Ⅴ7/ⅵ",cr:4,ct:"7",sr:9,sc:"harmonicMinor",cat:"secondary"},
+  {id:"I",roman:"Ⅰ△7",cr:0,ct:"maj7",sr:0,sc:"ionian",cat:"diatonic",alts:[{sr:0,sc:"majorPenta"},{sr:0,sc:"lydian"}]},
+  {id:"ii",roman:"ⅱm7",cr:2,ct:"m7",sr:2,sc:"dorian",cat:"diatonic",alts:[{sr:2,sc:"minorPenta"},{sr:2,sc:"melodicMinor"}]},
+  {id:"iii",roman:"ⅲm7",cr:4,ct:"m7",sr:4,sc:"phrygian",cat:"diatonic",alts:[{sr:4,sc:"minorPenta"}]},
+  {id:"IV",roman:"Ⅳ△7",cr:5,ct:"maj7",sr:5,sc:"lydian",cat:"diatonic",alts:[{sr:5,sc:"majorPenta"}]},
+  {id:"V",roman:"Ⅴ7",cr:7,ct:"7",sr:7,sc:"mixolydian",cat:"diatonic",alts:[{sr:7,sc:"altered"},{sr:7,sc:"lydianDominant"},{sr:7,sc:"halfWholeDim"}]},
+  {id:"vi",roman:"ⅵm7",cr:9,ct:"m7",sr:9,sc:"aeolian",cat:"diatonic",alts:[{sr:9,sc:"minorPenta"}]},
+  {id:"vii",roman:"ⅶø7",cr:11,ct:"m7b5",sr:11,sc:"locrian",cat:"diatonic",alts:[{sr:11,sc:"locrianNat2"}]},
+  {id:"V7ii",roman:"Ⅴ7/ⅱ",cr:9,ct:"7",sr:9,sc:"mixolydian",cat:"secondary",alts:[{sr:9,sc:"altered"},{sr:9,sc:"halfWholeDim"}]},
+  {id:"V7iii",roman:"Ⅴ7/ⅲ",cr:11,ct:"7",sr:11,sc:"mixolydian",cat:"secondary",alts:[{sr:11,sc:"altered"},{sr:11,sc:"halfWholeDim"}]},
+  {id:"V7IV",roman:"Ⅴ7/Ⅳ (=Ⅰ7)",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"secondary",alts:[{sr:0,sc:"lydianDominant"},{sr:0,sc:"halfWholeDim"}]},
+  {id:"V7V",roman:"Ⅴ7/Ⅴ",cr:2,ct:"7",sr:2,sc:"mixolydian",cat:"secondary",alts:[{sr:2,sc:"altered"},{sr:2,sc:"halfWholeDim"}]},
+  {id:"V7vi",roman:"Ⅴ7/ⅵ",cr:4,ct:"7",sr:9,sc:"harmonicMinor",cat:"secondary",alts:[{sr:4,sc:"altered"},{sr:4,sc:"halfWholeDim"}]},
   {id:"subV",roman:"sub Ⅴ7 (裏コード)",cr:1,ct:"7",sr:1,sc:"lydianDominant",cat:"subs"},
   {id:"subVii",roman:"sub Ⅴ7/ⅱ (裏コード)",cr:3,ct:"7",sr:3,sc:"lydianDominant",cat:"subs"},
   {id:"viidim",roman:"ⅶ°7 (パッシング)",cr:11,ct:"dim7",sr:11,sc:"wholeHalfDim",cat:"subs"},
-  {id:"iio",roman:"ⅱø7 (borrowed)",cr:2,ct:"m7b5",sr:2,sc:"locrianNat2",cat:"minorii"},
-  {id:"Valt",roman:"Ⅴ7alt (borrowed)",cr:7,ct:"7",sr:7,sc:"altered",cat:"minorii"},
-  {id:"imM7",roman:"ⅰm(maj7) (tonic minor)",cr:0,ct:"mMaj7",sr:0,sc:"melodicMinor",cat:"minorii"},
+  {id:"iio",roman:"ⅱø7 (borrowed)",cr:2,ct:"m7b5",sr:2,sc:"locrianNat2",cat:"minorii",alts:[{sr:2,sc:"locrian"}]},
+  {id:"Valt",roman:"Ⅴ7alt (borrowed)",cr:7,ct:"7",sr:7,sc:"altered",cat:"minorii",alts:[{sr:7,sc:"halfWholeDim"},{sr:0,sc:"harmonicMinor"}]},
+  {id:"imM7",roman:"ⅰm(maj7) (tonic minor)",cr:0,ct:"mMaj7",sr:0,sc:"melodicMinor",cat:"minorii",alts:[{sr:0,sc:"harmonicMinor"},{sr:0,sc:"minorPenta"}]},
 ];
+
+// ジャンル別進行(bars=そのコードの小節数、キーに対する相対で定義)
+const PROGS={
+  jazz251:{label:"ジャズ ⅱ-Ⅴ-Ⅰ",steps:[
+    {roman:"ⅱm9",cr:2,ct:"m9",sr:2,sc:"dorian",cat:"diatonic",bars:1,alts:[{sr:2,sc:"minorPenta"},{sr:2,sc:"melodicMinor"}]},
+    {roman:"Ⅴ13",cr:7,ct:"13",sr:7,sc:"mixolydian",cat:"secondary",bars:1,alts:[{sr:7,sc:"altered"},{sr:7,sc:"halfWholeDim"},{sr:7,sc:"lydianDominant"}]},
+    {roman:"Ⅰmaj9",cr:0,ct:"maj9",sr:0,sc:"ionian",cat:"diatonic",bars:2,alts:[{sr:0,sc:"majorPenta"},{sr:0,sc:"lydian"}]},
+  ]},
+  minor251:{label:"マイナー ⅱ-Ⅴ-ⅰ",steps:[
+    {roman:"ⅱø7",cr:2,ct:"m7b5",sr:2,sc:"locrianNat2",cat:"minorii",bars:1,alts:[{sr:2,sc:"locrian"}]},
+    {roman:"Ⅴ7♭9",cr:7,ct:"7b9",sr:0,sc:"harmonicMinor",cat:"secondary",bars:1,alts:[{sr:7,sc:"altered"},{sr:7,sc:"halfWholeDim"}]},
+    {roman:"ⅰm6",cr:0,ct:"m6",sr:0,sc:"melodicMinor",cat:"minorii",bars:2,alts:[{sr:0,sc:"minorPenta"},{sr:0,sc:"harmonicMinor"}]},
+  ]},
+  blues:{label:"ブルース(12小節)",steps:[
+    {roman:"Ⅰ7",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"diatonic",bars:1,alts:[{sr:0,sc:"blues"},{sr:0,sc:"minorPenta"},{sr:0,sc:"majorPenta"}]},
+    {roman:"Ⅳ7",cr:5,ct:"7",sr:5,sc:"mixolydian",cat:"subs",bars:1,alts:[{sr:0,sc:"blues"}]},
+    {roman:"Ⅰ7",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"diatonic",bars:2,alts:[{sr:0,sc:"blues"},{sr:0,sc:"minorPenta"}]},
+    {roman:"Ⅳ9",cr:5,ct:"9",sr:5,sc:"mixolydian",cat:"subs",bars:2,alts:[{sr:0,sc:"blues"}]},
+    {roman:"Ⅰ7",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"diatonic",bars:2,alts:[{sr:0,sc:"majorPenta"},{sr:0,sc:"blues"}]},
+    {roman:"Ⅴ9",cr:7,ct:"9",sr:7,sc:"mixolydian",cat:"secondary",bars:1,alts:[{sr:7,sc:"halfWholeDim"},{sr:0,sc:"blues"}]},
+    {roman:"Ⅳ9",cr:5,ct:"9",sr:5,sc:"mixolydian",cat:"subs",bars:1,alts:[{sr:0,sc:"blues"}]},
+    {roman:"Ⅰ7",cr:0,ct:"7",sr:0,sc:"mixolydian",cat:"diatonic",bars:1,alts:[{sr:0,sc:"blues"}]},
+    {roman:"Ⅴ7",cr:7,ct:"7",sr:7,sc:"mixolydian",cat:"secondary",bars:1,alts:[{sr:7,sc:"altered"},{sr:0,sc:"blues"}]},
+  ]},
+  pops:{label:"ポップス Ⅰ-Ⅴ-ⅵ-Ⅳ",steps:[
+    {roman:"Ⅰmaj7",cr:0,ct:"maj7",sr:0,sc:"ionian",cat:"diatonic",bars:1,alts:[{sr:0,sc:"majorPenta"}]},
+    {roman:"Ⅴ7",cr:7,ct:"7",sr:7,sc:"mixolydian",cat:"secondary",bars:1,alts:[{sr:0,sc:"majorPenta"}]},
+    {roman:"ⅵm7",cr:9,ct:"m7",sr:9,sc:"aeolian",cat:"diatonic",bars:1,alts:[{sr:9,sc:"minorPenta"}]},
+    {roman:"Ⅳmaj7",cr:5,ct:"maj7",sr:5,sc:"lydian",cat:"diatonic",bars:1,alts:[{sr:0,sc:"majorPenta"}]},
+  ]},
+  bossa:{label:"ボサノバ",steps:[
+    {roman:"Ⅰmaj9",cr:0,ct:"maj9",sr:0,sc:"ionian",cat:"diatonic",bars:2,alts:[{sr:0,sc:"lydian"},{sr:0,sc:"majorPenta"}]},
+    {roman:"Ⅱ9(♯11)",cr:2,ct:"9",sr:2,sc:"lydianDominant",cat:"secondary",bars:2},
+    {roman:"ⅱm9",cr:2,ct:"m9",sr:2,sc:"dorian",cat:"diatonic",bars:1,alts:[{sr:2,sc:"minorPenta"}]},
+    {roman:"Ⅴ13",cr:7,ct:"13",sr:7,sc:"mixolydian",cat:"secondary",bars:1,alts:[{sr:7,sc:"altered"},{sr:7,sc:"halfWholeDim"}]},
+  ]},
+  funk:{label:"ファンク(9thワンコード)",steps:[
+    {roman:"Ⅰ9",cr:0,ct:"9",sr:0,sc:"mixolydian",cat:"diatonic",bars:4,alts:[{sr:0,sc:"blues"},{sr:0,sc:"minorPenta"},{sr:0,sc:"dorian"}]},
+    {roman:"Ⅳ9",cr:5,ct:"9",sr:5,sc:"mixolydian",cat:"subs",bars:2,alts:[{sr:0,sc:"blues"}]},
+    {roman:"Ⅰ9",cr:0,ct:"9",sr:0,sc:"mixolydian",cat:"diatonic",bars:2,alts:[{sr:0,sc:"minorPenta"}]},
+  ]},
+};
 const KEYS=[
   {n:"C",pc:0,f:false},{n:"G",pc:7,f:false},{n:"D",pc:2,f:false},{n:"A",pc:9,f:false},
   {n:"E",pc:4,f:false},{n:"B",pc:11,f:false},{n:"F#",pc:6,f:false},
@@ -274,6 +339,9 @@ const TSIGS={
 let keyIndex=0;
 let cats={diatonic:true,secondary:true,subs:false,minorii:false};
 let current=ENTRIES[0], lastId=ENTRIES[0].id;
+let currentScale={sr:ENTRIES[0].sr,sc:ENTRIES[0].sc}; // 表示・再生中のスケール(おまかせ時はaltsから抽選)
+let scaleVariety=true; // スケールおまかせ
+let progMode="random", progStep=0; // ジャンル別進行
 let bpm=96, ts=TSIGS["4/4"], barsPerChord=2, autoAdv=true, playing=false;
 let feel="just", feelMs=20; // ノリ: just/ahead(前)/behind(後) とズレ幅
 let clickOn=true, chordSoundOn=false, scaleSoundOn=false; // サウンドレイヤー
@@ -282,14 +350,15 @@ let clickLoop=null, barLoop=null, hi=null, lo=null, guide=null, chordSynth=null,
 let tapTimes=[];
 
 // コードタイプ→構成音(ルートからの半音数)
-const CHORD_IV={maj7:[0,4,7,11],m7:[0,3,7,10],"7":[0,4,7,10],m7b5:[0,3,6,10],dim7:[0,3,6,9],mMaj7:[0,3,7,11]};
+const CHORD_IV={maj7:[0,4,7,11],m7:[0,3,7,10],"7":[0,4,7,10],m7b5:[0,3,6,10],dim7:[0,3,6,9],mMaj7:[0,3,7,11],
+  "6":[0,4,7,9],m6:[0,3,7,9],"9":[0,4,10,14],m9:[0,3,10,14],maj9:[0,4,11,14],"7b9":[0,4,10,13],"13":[0,4,10,14,21]};
 function chordFreqs(){
   const k=KEYS[keyIndex];
   const rootMidi=48+((k.pc+current.cr)%12);
   return CHORD_IV[current.ct].map(v=>Tone.Frequency(rootMidi+v,"midi"));
 }
 function scaleFreqs(){
-  const k=KEYS[keyIndex], s=SCALES[current.sc], scaleRoot=(k.pc+current.sr)%12;
+  const k=KEYS[keyIndex], s=SCALES[currentScale.sc], scaleRoot=(k.pc+currentScale.sr)%12;
   return [...s.iv,12].map(v=>Tone.Frequency(60+scaleRoot+v,"midi"));
 }
 
@@ -380,10 +449,11 @@ function svgTab(posns,notes,bg){
 function renderCard(){
   const k=KEYS[keyIndex], m=CATS[current.cat];
   const chordRoot=nn(k.pc+current.cr,k.f);
-  const s=SCALES[current.sc], scaleRoot=(k.pc+current.sr)%12;
+  const s=SCALES[currentScale.sc], scaleRoot=(k.pc+currentScale.sr)%12;
   const chSet=new Set(s.ch);
   $("flash").style.background=m.bg;
-  $("badge").textContent=current.roman+" ・ "+m.label;
+  $("badge").textContent=progMode==="random" ? current.roman+" ・ "+m.label
+    : PROGS[progMode].label+" ・ "+current.roman+" ("+(progStep+1)+"/"+PROGS[progMode].steps.length+")";
   $("badge").style.color=m.color;
   $("chord").textContent=chordRoot+SUF[current.ct];
   $("scaleName").textContent=nn(scaleRoot,k.f)+" "+s.ja;
@@ -407,15 +477,25 @@ function renderCard(){
 }
 renderCard();
 
-// 抽選(currentの更新)と描画を分離: オーディオスケジューリングからは pickNext を同期で呼び、描画のみ Tone.Draw に遅延させる
+// 抽選(currentの更新)と描画を分離: オーディオスケジューリングからは pickNext/stepNext を同期で呼び、描画のみ Tone.Draw に遅延させる
+function chooseScale(entry){
+  const opts=[{sr:entry.sr,sc:entry.sc},...((scaleVariety&&entry.alts)?entry.alts:[])];
+  currentScale=opts[Math.floor(Math.random()*opts.length)];
+}
 function pickNext(){
   let pool=ENTRIES.filter(e=>cats[e.cat]);
   if(pool.length===0) pool=ENTRIES;
   let e;
   do{ e=pool[Math.floor(Math.random()*pool.length)]; }while(pool.length>1&&e.id===lastId);
-  lastId=e.id; current=e;
+  lastId=e.id; current=e; chooseScale(e);
 }
-function pickRandom(){ pickNext(); renderCard(); lastChangeBar=barCount; }
+function stepNext(){ // ジャンル進行を1コード進める
+  const steps=PROGS[progMode].steps;
+  progStep=(progStep+1)%steps.length;
+  current=steps[progStep]; chooseScale(current);
+}
+function advance(){ if(progMode==="random") pickNext(); else stepNext(); }
+function advanceManual(){ advance(); renderCard(); lastChangeBar=barCount; }
 
 // ---------- metronome ----------
 // 変則分母(6,5,7等)のパルスをtick単位で整数にするため高解像度PPQにする (2520*4=10080 は 2..10,12,14,16 で割り切れる)
@@ -454,7 +534,14 @@ $("scaleChk").onchange=e=>{scaleSoundOn=e.target.checked;};
 $("barsSel").onchange=e=>{barsPerChord=+e.target.value;};
 $("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing&&autoAdv) lastChangeBar=barCount;};
 $("keySel").onchange=e=>{keyIndex=+e.target.value; renderCard();};
-$("nextBtn").onclick=pickRandom;
+$("nextBtn").onclick=advanceManual;
+$("progSel").onchange=e=>{
+  progMode=e.target.value; progStep=0;
+  if(progMode==="random") pickNext();
+  else { current=PROGS[progMode].steps[0]; chooseScale(current); }
+  renderCard(); lastChangeBar=barCount;
+};
+$("varietyChk").onchange=e=>{scaleVariety=e.target.checked; chooseScale(current); renderCard();};
 
 $("tapBtn").onclick=()=>{
   const now=performance.now();
@@ -498,8 +585,9 @@ function start(){
   // ※コード切替を別Loop+Tone.Drawで行うと、切替小節でコード音が旧コードを鳴らす(1小節遅れ)ため必ずこの順序で行う
   barCount=0; lastChangeBar=0;
   barLoop=new Tone.Loop(time=>{
-    if(autoAdv&&barCount>0&&barCount-lastChangeBar>=barsPerChord){
-      pickNext(); lastChangeBar=barCount;
+    const stepLen=progMode==="random"?barsPerChord:PROGS[progMode].steps[progStep].bars;
+    if(autoAdv&&barCount>0&&barCount-lastChangeBar>=stepLen){
+      advance(); lastChangeBar=barCount;
       Tone.Draw.schedule(renderCard,time);
     }
     const barDur=Tone.Time("1m").toSeconds();
