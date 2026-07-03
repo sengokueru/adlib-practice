@@ -25,9 +25,8 @@
   <input id="url" value="">
 </div>
 <script>
-// このページを開いたホスト名を使ってアプリのURLを組み立てる(localhostで開いた場合はLAN IPに読み替え)
-const defaultUrl = "http://" + (["localhost","127.0.0.1"].includes(location.hostname) ? "192.168.0.69" : location.hostname)
-                 + ":" + (location.port || 80) + "/";
+// 既定は本番(GitHub Pages)のURL。LAN配信を使う場合は入力欄で書き換え可
+const defaultUrl = "https://sengokueru.github.io/adlib-practice/";
 const box = document.getElementById("qr"), input = document.getElementById("url");
 input.value = defaultUrl;
 function draw(){ box.innerHTML = ""; new QRCode(box, { text: input.value, width: 240, height: 240 }); }
