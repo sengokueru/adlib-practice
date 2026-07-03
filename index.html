@@ -113,6 +113,8 @@
     font-size:12px; font-weight:600; padding:6px 10px; border-radius:2px; background:#fff; border:1.5px solid;
   }
   .filters button.on { color:#fff !important; }
+  .filters button:disabled { opacity:.45; }
+  .dimmed { opacity:.45; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -136,7 +138,7 @@
     <div class="notation">
       <div id="staffWrap"></div>
       <div id="tabWrap"></div>
-      <div class="chLabel"><span class="chDot"></span><span id="chLabel"></span></div>
+      <div class="chLabel"><span class="chDot" id="chDot"></span><span id="chLabel"></span></div>
     </div>
   </div>
 
@@ -204,6 +206,7 @@
       <label><input type="checkbox" id="clickChk" checked> クリック</label>
       <label><input type="checkbox" id="chordChk"> コード音</label>
       <label><input type="checkbox" id="scaleChk"> スケール音</label>
+      <label><input type="checkbox" id="countChk"> カウントイン</label>
     </div>
     <div class="btnRow">
       <button id="playBtn">▶ 開始</button>
@@ -345,6 +348,7 @@ let progMode="random", progStep=0; // ジャンル別進行
 let bpm=96, ts=TSIGS["4/4"], barsPerChord=2, autoAdv=true, playing=false;
 let feel="just", feelMs=20; // ノリ: just/ahead(前)/behind(後) とズレ幅
 let clickOn=true, chordSoundOn=false, scaleSoundOn=false; // サウンドレイヤー
+let countIn=false; // カウントイン(開始前に1小節クリックのみ)
 let barCount=0, lastChangeBar=0; // コード自動進行の小節カウンタ(barLoop内で更新)
 let clickLoop=null, barLoop=null, hi=null, lo=null, guide=null, chordSynth=null, scaleSynth=null;
 let tapTimes=[];
@@ -473,9 +477,18 @@ function renderCard(){
   });
   $("staffWrap").innerHTML=svgStaff(notes);
   $("tabWrap").innerHTML=svgTab(tabPositions(scaleRoot,ivs),notes,m.bg);
+  $("chDot").style.display=s.ch.length?"":"none"; // 特徴音なしのスケールでは凡例ドットを出さない
   $("chLabel").textContent="特徴音: "+s.chJa;
 }
 renderCard();
+
+// 進行モード中は効かない設定(小節/コード・カテゴリフィルタ)をグレーアウト
+function updateModeUI(){
+  const prog=progMode!=="random";
+  $("barsSel").disabled=prog;
+  $("barsSel").parentElement.classList.toggle("dimmed",prog);
+  [...$("filters").children].forEach(b=>b.disabled=prog);
+}
 
 // 抽選(currentの更新)と描画を分離: オーディオスケジューリングからは pickNext/stepNext を同期で呼び、描画のみ Tone.Draw に遅延させる
 function chooseScale(entry){
@@ -531,6 +544,7 @@ $("feelAmt").onchange=e=>{feelMs=+e.target.value; updateFeelHint();};
 $("clickChk").onchange=e=>{clickOn=e.target.checked;};
 $("chordChk").onchange=e=>{chordSoundOn=e.target.checked;};
 $("scaleChk").onchange=e=>{scaleSoundOn=e.target.checked;};
+$("countChk").onchange=e=>{countIn=e.target.checked;};
 $("barsSel").onchange=e=>{barsPerChord=+e.target.value;};
 $("autoChk").onchange=e=>{autoAdv=e.target.checked; if(playing&&autoAdv) lastChangeBar=barCount;};
 $("keySel").onchange=e=>{keyIndex=+e.target.value; renderCard();};
@@ -539,7 +553,7 @@ $("progSel").onchange=e=>{
   progMode=e.target.value; progStep=0;
   if(progMode==="random") pickNext();
   else { current=PROGS[progMode].steps[0]; chooseScale(current); }
-  renderCard(); lastChangeBar=barCount;
+  renderCard(); updateModeUI(); lastChangeBar=barCount;
 };
 $("varietyChk").onchange=e=>{scaleVariety=e.target.checked; chooseScale(current); renderCard();};
 
@@ -568,9 +582,12 @@ function start(){
   let beat=0;
   clickLoop=new Tone.Loop(time=>{
     const b=beat%ts.b, down=b===0, grp=gs.has(b);
+    const inCount=countIn&&beat<ts.b; // カウントイン中(最初の1小節)はクリックOFFでも必ず鳴らす
     // ノリ: ガイド音は正拍、クリックは±feelMsずらす(Loopのlookahead≈100ms内なので負方向も安全)
     const off=feel==="ahead"?-feelMs/1000:feel==="behind"?feelMs/1000:0;
-    if(clickOn){
+    if(inCount){
+      (down?lo:hi).triggerAttackRelease(down?"C5":"G5","32n",time);
+    } else if(clickOn){
       if(off!==0) guide.triggerAttackRelease("C6","64n",time);
       (down?lo:hi).triggerAttackRelease(down?"C5":grp?"G5":"E5","32n",time+off,grp?1:0.6);
     }
@@ -597,7 +614,7 @@ function start(){
       fs.forEach((f,i)=>scaleSynth.triggerAttackRelease(f,step*0.85,time+i*step));
     }
     barCount++;
-  },"1m").start(0);
+  },"1m").start(countIn?"1m":0); // カウントインON時はコード/スケール/進行を1小節遅らせる
   Tone.Transport.start();
 }
 function stop(){
@@ -610,10 +627,64 @@ function stop(){
   Tone.Transport.stop(); Tone.Transport.cancel();
   renderBeats();
 }
+// 再生中は画面スリープを防ぐ(未対応ブラウザでは何もしない)
+let wakeLock=null;
+async function acquireWakeLock(){
+  try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
+// バックグラウンド復帰時: Wake Lockは自動解放されるので再取得し、サスペンドされたオーディオを再開する
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden&&playing){
+    acquireWakeLock();
+    if(Tone.context.state!=="running") Tone.context.resume();
+  }
+});
+
 $("playBtn").onclick=async()=>{
-  if(!playing){ await Tone.start(); start(); playing=true; $("playBtn").textContent="■ 停止"; $("playBtn").classList.add("playing"); }
-  else { stop(); playing=false; $("playBtn").textContent="▶ 開始"; $("playBtn").classList.remove("playing"); }
+  if(!playing){ await Tone.start(); start(); playing=true; acquireWakeLock(); $("playBtn").textContent="■ 停止"; $("playBtn").classList.add("playing"); }
+  else { stop(); playing=false; releaseWakeLock(); $("playBtn").textContent="▶ 開始"; $("playBtn").classList.remove("playing"); }
 };
+
+// ---------- settings persistence ----------
+const SETTINGS_KEY="adlib-settings-v1";
+let saveT=null;
+function saveSettings(){
+  try{
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify({
+      keyIndex,cats,bpm,tsVal:$("tsSel").value,ctsNum:$("ctsNum").value,ctsDen:$("ctsDen").value,ctsGrp:$("ctsGrp").value,
+      barsPerChord,autoAdv,feel,feelMs,clickOn,chordSoundOn,scaleSoundOn,countIn,scaleVariety,progMode,
+    }));
+  }catch(e){}
+}
+function scheduleSave(){ clearTimeout(saveT); saveT=setTimeout(saveSettings,300); }
+function loadSettings(){
+  let s=null;
+  try{ s=JSON.parse(localStorage.getItem(SETTINGS_KEY)); }catch(e){}
+  if(!s) return;
+  const chg=el=>el.dispatchEvent(new Event("change"));
+  if(Number.isInteger(s.keyIndex)&&KEYS[s.keyIndex]){ $("keySel").value=s.keyIndex; chg($("keySel")); }
+  if(s.cats){ Object.keys(cats).forEach(k=>{ if(typeof s.cats[k]==="boolean") cats[k]=s.cats[k]; }); renderFilters(); }
+  if(typeof s.bpm==="number") setBpm(s.bpm);
+  [["barsSel",s.barsPerChord],["feelSel",s.feel],["feelAmt",s.feelMs]].forEach(([id,v])=>{
+    if(v!=null){ $(id).value=v; chg($(id)); }
+  });
+  [["autoChk",s.autoAdv],["clickChk",s.clickOn],["chordChk",s.chordSoundOn],["scaleChk",s.scaleSoundOn],["countChk",s.countIn],["varietyChk",s.scaleVariety]].forEach(([id,v])=>{
+    if(typeof v==="boolean"){ $(id).checked=v; chg($(id)); }
+  });
+  if(s.tsVal&&(TSIGS[s.tsVal]||s.tsVal==="custom")){
+    if(s.tsVal==="custom"){ $("ctsNum").value=s.ctsNum||8; $("ctsDen").value=s.ctsDen||"6"; $("ctsGrp").value=s.ctsGrp||""; }
+    $("tsSel").value=s.tsVal; chg($("tsSel"));
+  }
+  if(s.progMode&&(s.progMode==="random"||PROGS[s.progMode])){ $("progSel").value=s.progMode; chg($("progSel")); }
+}
+["keySel","tsSel","barsSel","autoChk","feelSel","feelAmt","clickChk","chordChk","scaleChk","countChk","progSel","varietyChk","ctsNum","ctsDen","ctsGrp"]
+  .forEach(id=>$(id).addEventListener("change",scheduleSave));
+[...$("filters").children].forEach(b=>b.addEventListener("click",scheduleSave));
+$("bpmSlider").addEventListener("change",scheduleSave);
+const _setBpm=setBpm; setBpm=v=>{_setBpm(v); scheduleSave();};
+loadSettings();
+updateModeUI();
 
 // ---------- PWA ----------
 if("serviceWorker" in navigator && (location.protocol==="https:"||["localhost","127.0.0.1"].includes(location.hostname))){
