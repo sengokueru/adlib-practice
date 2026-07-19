@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ツベランキング — YouTubeジャンル別ランキング</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#181b22; --card2:#1f232c; --border:#2a2f3a;
+    --text:#e8eaf0; --sub:#9aa3b2; --accent:#ff4d4d; --accent2:#ffb02e;
+    --gold:#ffd700; --silver:#c0c8d8; --bronze:#cd8b52;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;min-height:100vh}
+  header{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+  .head-inner{max-width:960px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{font-size:1.15rem;font-weight:800;letter-spacing:.02em}
+  h1 span{color:var(--accent)}
+  .controls{display:flex;gap:8px;margin-left:auto;align-items:center}
+  select,button,input{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+  button{cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  nav{max-width:960px;margin:0 auto;padding:0 16px 10px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
+  nav button{white-space:nowrap;border-radius:999px;font-size:.85rem;padding:6px 14px;background:var(--card)}
+  nav button.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  main{max-width:960px;margin:0 auto;padding:16px}
+  .setup{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;line-height:1.9}
+  .setup h2{font-size:1rem;margin-bottom:8px}
+  .setup ol{padding-left:1.4em;color:var(--sub);font-size:.9rem}
+  .setup a{color:var(--accent2)}
+  .keyrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .keyrow input{flex:1;min-width:220px}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .item{display:flex;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-decoration:none;color:inherit;transition:transform .08s,border-color .08s}
+  .item:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .rank{flex:0 0 44px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:800;color:var(--sub)}
+  .rank.r1{color:var(--gold)} .rank.r2{color:var(--silver)} .rank.r3{color:var(--bronze)}
+  .thumb{flex:0 0 160px;position:relative}
+  .thumb img{width:160px;height:90px;object-fit:cover;border-radius:8px;display:block}
+  .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.8);font-size:.7rem;padding:1px 5px;border-radius:4px}
+  .meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+  .title{font-weight:700;font-size:.95rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .ch{color:var(--sub);font-size:.8rem}
+  .stats{display:flex;gap:12px;font-size:.78rem;color:var(--sub);flex-wrap:wrap}
+  .stats b{color:var(--accent2);font-weight:700}
+  .msg{text-align:center;color:var(--sub);padding:40px 0}
+  footer{max-width:960px;margin:0 auto;padding:24px 16px;color:var(--sub);font-size:.75rem;text-align:center}
+  @media(max-width:560px){
+    .thumb{flex-basis:120px}.thumb img{width:120px;height:68px}
+    .rank{flex-basis:32px;font-size:1.05rem}
+    .title{font-size:.85rem}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <h1>ツベ<span>ランキング</span> 📈</h1>
+    <div class="controls">
+      <select id="region">
+        <option value="JP" selected>🇯🇵 日本</option>
+        <option value="US">🇺🇸 アメリカ</option>
+        <option value="KR">🇰🇷 韓国</option>
+        <option value="TW">🇹🇼 台湾</option>
+        <option value="GB">🇬🇧 イギリス</option>
+        <option value="IN">🇮🇳 インド</option>
+      </select>
+      <button id="reload" title="更新">🔄</button>
+      <button id="resetKey" title="APIキーを変更">🔑</button>
+    </div>
+  </div>
+  <nav id="tabs"></nav>
+</header>
+<main id="main"></main>
+<footer>YouTube Data API v3 の mostPopular チャートを利用。APIキーはこの端末の localStorage のみに保存され、外部送信はGoogleへのAPIリクエスト以外にありません。</footer>
+
+<script>
+const CATS = [
+  {id:"",   name:"総合"},
+  {id:"10", name:"音楽"},
+  {id:"20", name:"ゲーム"},
+  {id:"24", name:"エンタメ"},
+  {id:"23", name:"コメディ"},
+  {id:"17", name:"スポーツ"},
+  {id:"25", name:"ニュース"},
+  {id:"28", name:"科学・技術"},
+  {id:"27", name:"教育"},
+  {id:"26", name:"ハウツー"},
+  {id:"1",  name:"映画・アニメ"},
+  {id:"15", name:"動物"},
+  {id:"2",  name:"車・乗り物"},
+];
+const $ = s => document.querySelector(s);
+const main = $("#main"), tabs = $("#tabs");
+let cat = "", key = localStorage.getItem("yt_api_key") || "";
+
+CATS.forEach(c=>{
+  const b=document.createElement("button");
+  b.textContent=c.name; b.dataset.id=c.id;
+  if(c.id===cat) b.classList.add("active");
+  b.onclick=()=>{cat=c.id; tabs.querySelectorAll("button").forEach(x=>x.classList.toggle("active",x.dataset.id===cat)); load();};
+  tabs.appendChild(b);
+});
+
+function showSetup(){
+  main.innerHTML=`<div class="setup">
+    <h2>🔑 YouTube APIキーを設定してください（無料・1分）</h2>
+    <ol>
+      <li><a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> で「YouTube Data API v3」を有効化</li>
+      <li>「認証情報」→「APIキーを作成」でキーを取得</li>
+      <li>下に貼り付けて保存（この端末にのみ保存されます）</li>
+    </ol>
+    <div class="keyrow">
+      <input id="keyInput" type="password" placeholder="AIza..." autocomplete="off">
+      <button id="saveKey">保存して表示</button>
+    </div>
+  </div>`;
+  $("#saveKey").onclick=()=>{
+    const v=$("#keyInput").value.trim();
+    if(!v) return;
+    key=v; localStorage.setItem("yt_api_key",v); load();
+  };
+}
+
+const fmt = n => {
+  n=+n;
+  if(isNaN(n)) return "-";
+  if(n>=1e8) return (n/1e8).toFixed(1)+"億";
+  if(n>=1e4) return (n/1e4).toFixed(1)+"万";
+  return n.toLocaleString();
+};
+const ago = iso => {
+  const h=(Date.now()-new Date(iso))/36e5;
+  if(h<1) return "1時間以内";
+  if(h<24) return Math.floor(h)+"時間前";
+  const d=Math.floor(h/24);
+  return d<30 ? d+"日前" : Math.floor(d/30)+"ヶ月前";
+};
+const dur = iso => {
+  const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if(!m) return "";
+  const [,h,mi,s]=m;
+  return (h?h+":":"")+String(mi||0).padStart(h?2:1,"0")+":"+String(s||0).padStart(2,"0");
+};
+const esc = s => s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function load(){
+  if(!key){ showSetup(); return; }
+  main.innerHTML=`<div class="msg">読み込み中…</div>`;
+  const region=$("#region").value;
+  const url=new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.search=new URLSearchParams({
+    part:"snippet,statistics,contentDetails", chart:"mostPopular",
+    regionCode:region, maxResults:"50", key,
+    ...(cat?{videoCategoryId:cat}:{})
+  });
+  try{
+    const res=await fetch(url);
+    const data=await res.json();
+    if(data.error){
+      const reason=data.error.errors?.[0]?.reason;
+      if(reason==="keyInvalid"||res.status===400&&/API key/i.test(data.error.message)){
+        localStorage.removeItem("yt_api_key"); key=""; showSetup(); return;
+      }
+      main.innerHTML=`<div class="msg">このジャンルは選択中の地域ではチャート未提供のようです。<br><small>${esc(data.error.message||"")}</small></div>`;
+      return;
+    }
+    if(!data.items?.length){ main.innerHTML=`<div class="msg">データがありません</div>`; return; }
+    main.innerHTML=`<div class="list">`+data.items.map((v,i)=>{
+      const s=v.snippet, st=v.statistics||{};
+      const r=i+1;
+      return `<a class="item" href="https://www.youtube.com/watch?v=${v.id}" target="_blank" rel="noopener">
+        <div class="rank ${r<=3?"r"+r:""}">${r}</div>
+        <div class="thumb"><img loading="lazy" src="${s.thumbnails?.medium?.url||""}" alt=""><span class="dur">${dur(v.contentDetails?.duration||"")}</span></div>
+        <div class="meta">
+          <div class="title">${esc(s.title)}</div>
+          <div class="ch">${esc(s.channelTitle)} ・ ${ago(s.publishedAt)}</div>
+          <div class="stats"><span>▶ 再生 <b>${fmt(st.viewCount)}</b></span><span>👍 <b>${fmt(st.likeCount)}</b></span><span>💬 <b>${fmt(st.commentCount)}</b></span></div>
+        </div>
+      </a>`;
+    }).join("")+`</div>`;
+  }catch(e){
+    main.innerHTML=`<div class="msg">通信エラー：${esc(String(e))}</div>`;
+  }
+}
+
+$("#region").onchange=load;
+$("#reload").onclick=load;
+$("#resetKey").onclick=()=>{ localStorage.removeItem("yt_api_key"); key=""; showSetup(); };
+load();
+</script>
+</body>
+</html>
