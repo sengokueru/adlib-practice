@@ -1,0 +1,30 @@
+name: Build key-hold exe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "key-hold/**"
+      - ".github/workflows/build-key-hold-exe.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pynput pyinstaller
+
+      - name: Build exe
+        run: pyinstaller --onefile --noconsole --name KeyHold key-hold/key_hold.py
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyHold-exe
+          path: dist/KeyHold.exe
