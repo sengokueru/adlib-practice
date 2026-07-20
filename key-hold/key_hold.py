@@ -171,4 +171,5 @@ class KeyHoldApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    KeyHoldApp(root).mainloop()
+    KeyHoldApp(root)
+    root.mainloop()
