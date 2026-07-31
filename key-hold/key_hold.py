@@ -4,9 +4,10 @@
 
 Enterキーや任意のキーを「押しっぱなし」または「連打」状態にするツール。
 ON/OFFの切替キー(ホットキー)は好きなキーに変更できます。
+ウィンドウを閉じてもタスクトレイに常駐し、切替キーは効き続けます。
 
-必要ライブラリ: pynput
-    pip install pynput
+必要ライブラリ: pynput, pystray, pillow
+    pip install pynput pystray pillow
 
 起動:
     python key_hold.py
@@ -26,6 +27,14 @@ except ImportError:
     print("pynput がインストールされていません。以下を実行してください:")
     print("  pip install pynput")
     sys.exit(1)
+
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+    HAS_TRAY = True
+except Exception:
+    # 未インストール時だけでなく、トレイ機能が使えない環境でも本体は動かす
+    HAS_TRAY = False
 
 # 選べる特殊キー
 SPECIAL_KEYS = {
@@ -112,7 +121,7 @@ class KeyHoldApp:
         self.capturing = False  # 切替キーの設定待ち状態
 
         root.title("キー押しっぱなしツール")
-        root.geometry("360x400")
+        root.geometry("360x480")
         root.resizable(False, False)
         root.attributes("-topmost", True)
 
@@ -167,6 +176,19 @@ class KeyHoldApp:
                                 wraplength=330)
         self.status.pack(**pad)
 
+        ttk.Label(
+            root,
+            text="※ ウィンドウを閉じてもタスクトレイに常駐し、切替キーは効き続けます",
+            foreground="gray", wraplength=330, font=("", 8)
+        ).pack(**pad)
+
+        bottom = ttk.Frame(root)
+        bottom.pack(fill="x", side="bottom", padx=12, pady=8)
+        ttk.Button(bottom, text="トレイにしまう",
+                   command=self.hide_to_tray).pack(side="left")
+        ttk.Button(bottom, text="アプリを終了",
+                   command=self.quit_app).pack(side="right")
+
         self.load_config()
         self.refresh_idle_text()
 
@@ -175,7 +197,12 @@ class KeyHoldApp:
         self.listener.daemon = True
         self.listener.start()
 
-        root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.tray = None
+        self.tray_notified = False
+        self.setup_tray()
+
+        # ✕ を押してもアプリは終了せず、トレイに隠れるだけ
+        root.protocol("WM_DELETE_WINDOW", self.hide_to_tray)
 
     # ---------- 設定の保存/読み込み ----------
 
@@ -211,6 +238,83 @@ class KeyHoldApp:
         except OSError:
             pass  # 保存できなくても動作は続ける
 
+    # ---------- タスクトレイ常駐 ----------
+
+    def make_tray_image(self):
+        """状態がひと目で分かるトレイアイコンを描く(停止=緑 / 動作中=赤)。"""
+        color = "#e53935" if self.active else "#4caf50"
+        image = Image.new("RGB", (64, 64), "#263238")
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((8, 8, 56, 56), radius=12, fill=color)
+        draw.rectangle((26, 20, 38, 44), fill="white")  # キーを模した図形
+        return image
+
+    def setup_tray(self):
+        if not HAS_TRAY:
+            return
+        menu = pystray.Menu(
+            pystray.MenuItem(
+                lambda item: "停止" if self.active else "開始",
+                lambda: self.root.after(0, self.toggle),
+                default=True,
+            ),
+            pystray.MenuItem("設定ウィンドウを開く",
+                             lambda: self.root.after(0, self.show_window)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("終了", lambda: self.root.after(0, self.quit_app)),
+        )
+        try:
+            self.tray = pystray.Icon(
+                "key_hold", self.make_tray_image(), "キー押しっぱなしツール", menu
+            )
+            threading.Thread(target=self.tray.run, daemon=True).start()
+        except Exception:
+            self.tray = None  # トレイが使えない環境でも本体は動かす
+
+    def refresh_tray(self):
+        if not self.tray:
+            return
+        state = "動作中" if self.active else "停止中"
+        try:
+            self.tray.icon = self.make_tray_image()
+            self.tray.title = (
+                f"キー押しっぱなしツール — {state}"
+                f"({key_to_text(self.toggle_key)}で切替)"
+            )
+        except Exception:
+            pass
+
+    def hide_to_tray(self):
+        """✕ で閉じたときはトレイに隠すだけ(切替キーは効き続ける)。"""
+        if not self.tray:
+            self.quit_app()  # トレイが無い環境では従来どおり終了
+            return
+        self.save_config()
+        self.root.withdraw()
+        if not self.tray_notified:
+            self.tray_notified = True
+            try:
+                self.tray.notify(
+                    f"タスクトレイで動作中です。"
+                    f"{key_to_text(self.toggle_key)} で切替できます。",
+                    "キー押しっぱなしツール",
+                )
+            except Exception:
+                pass
+
+    def show_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def quit_app(self):
+        self.stop()
+        self.save_config()
+        self.listener.stop()
+        if self.tray:
+            self.tray.stop()
+        self.root.destroy()
+
     # ---------- 切替キーの変更 ----------
 
     def begin_capture(self):
@@ -240,6 +344,7 @@ class KeyHoldApp:
                 "動作が不安定になるため、別のキーをおすすめします。"
             )
         self.refresh_idle_text()
+        self.refresh_tray()
 
     # ---------- 動作 ----------
 
@@ -288,6 +393,7 @@ class KeyHoldApp:
         self.button.config(text=f"停止 ({name})", bg="#e53935")
         self.status.config(text=f"{self.key_var.get()} を{mode_text}中…",
                            foreground="#e53935")
+        self.refresh_tray()
 
     def stop(self):
         self.active = False
@@ -297,6 +403,7 @@ class KeyHoldApp:
             self.worker = None
         self.button.config(bg="#4caf50")
         self.refresh_idle_text()
+        self.refresh_tray()
 
     def run_worker(self, key, mode, interval):
         if mode == "hold":
@@ -309,11 +416,8 @@ class KeyHoldApp:
                 self.controller.release(key)
                 self.stop_event.wait(interval)
 
-    def on_close(self):
-        self.stop()
-        self.save_config()
-        self.listener.stop()
-        self.root.destroy()
+    # 旧名の互換用
+    on_close = quit_app
 
 
 if __name__ == "__main__":
