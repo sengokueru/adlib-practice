@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -56,6 +57,9 @@ SPECIAL_KEYS = {
 
 DEFAULT_TOGGLE = Key.f6
 
+# 切替の最短間隔(秒)。取りこぼしではなく誤爆を防ぐための最低限の値
+TOGGLE_COOLDOWN = 0.2
+
 # 設定ファイル(実行ファイルと同じ場所ではなくユーザーフォルダに保存)
 CONFIG_PATH = os.path.join(
     os.path.expanduser("~"), ".key_hold_config.json"
@@ -76,7 +80,8 @@ def key_to_store(key) -> str:
     """キーオブジェクトを設定ファイル保存用の文字列にする。"""
     if isinstance(key, KeyCode):
         if key.char:
-            return "char:" + key.char
+            # vk も残しておくと、次回起動後も Ctrl 併用時の照合が効く
+            return f"char:{key.char}:{key.vk if key.vk is not None else ''}"
         return "vk:" + str(key.vk)
     return "key:" + key.name
 
@@ -86,7 +91,8 @@ def key_from_store(text: str):
     try:
         kind, _, value = text.partition(":")
         if kind == "char":
-            return KeyCode.from_char(value)
+            char, _, vk = value.partition(":")
+            return KeyCode(char=char, vk=int(vk) if vk else None)
         if kind == "vk":
             return KeyCode.from_vk(int(value))
         if kind == "key":
@@ -105,8 +111,22 @@ def normalize(key):
     }
     key = pairs.get(key, key)
     if isinstance(key, KeyCode) and key.char:
-        return KeyCode.from_char(key.char.lower())
+        # vk は Ctrl 併用時の照合に使うので保持したままにする
+        return KeyCode(char=key.char.lower(), vk=key.vk)
     return key
+
+
+def same_key(a, b) -> bool:
+    """2つのキーが同じか判定する。
+
+    Ctrlなどを押しっぱなしにしていると、文字キーの char が制御文字(Ctrl+J → '\\n')
+    に化けて一致しなくなる。そのため vk(キーの物理的な番号)でも照合する。
+    """
+    if normalize(a) == normalize(b):
+        return True
+    # normalize は char を作り直すため vk が落ちる。元のキーのまま突き合わせる
+    va, vb = getattr(a, "vk", None), getattr(b, "vk", None)
+    return va is not None and va == vb
 
 
 class KeyHoldApp:
@@ -118,7 +138,9 @@ class KeyHoldApp:
         self.stop_event = threading.Event()
 
         self.toggle_key = DEFAULT_TOGGLE
-        self.capturing = False  # 切替キーの設定待ち状態
+        self.capturing = False       # 切替キーの設定待ち状態
+        self.toggle_key_down = False  # 切替キーが物理的に押されたままか
+        self.last_toggle_at = 0.0
 
         root.title("キー押しっぱなしツール")
         root.geometry("360x480")
@@ -193,7 +215,8 @@ class KeyHoldApp:
         self.refresh_idle_text()
 
         # グローバルキー監視
-        self.listener = keyboard.Listener(on_press=self.on_global_key)
+        self.listener = keyboard.Listener(on_press=self.on_global_key,
+                                          on_release=self.on_global_release)
         self.listener.daemon = True
         self.listener.start()
 
@@ -360,9 +383,28 @@ class KeyHoldApp:
 
     def on_global_key(self, key):
         if self.capturing:
+            self.toggle_key_down = True  # 登録直後の離すまでを押下中として扱う
             self.root.after(0, self.finish_capture, key)
-        elif normalize(key) == self.toggle_key:
-            self.root.after(0, self.toggle)
+            return
+
+        if not same_key(key, self.toggle_key):
+            return
+
+        # キーを押しっぱなしにするとOSが同じ押下イベントを連続で送ってくるため、
+        # 一度離すまでは次の切替を受け付けない(ON/OFFの高速な往復を防ぐ)
+        if self.toggle_key_down:
+            return
+        self.toggle_key_down = True
+
+        now = time.monotonic()
+        if now - self.last_toggle_at < TOGGLE_COOLDOWN:
+            return
+        self.last_toggle_at = now
+        self.root.after(0, self.toggle)
+
+    def on_global_release(self, key):
+        if same_key(key, self.toggle_key):
+            self.toggle_key_down = False
 
     def toggle(self):
         if self.active:
@@ -396,25 +438,36 @@ class KeyHoldApp:
         self.refresh_tray()
 
     def stop(self):
+        self.stop_event.set()  # 先に合図を出して即座に離させる
         self.active = False
-        self.stop_event.set()
         if self.worker:
-            self.worker.join(timeout=1)
+            self.worker.join(timeout=0.5)
             self.worker = None
+        # 保険:ワーカーが止まりきらなくてもキーは離しておく
+        try:
+            self.controller.release(self.current_key())
+        except Exception:
+            pass
         self.button.config(bg="#4caf50")
         self.refresh_idle_text()
         self.refresh_tray()
 
     def run_worker(self, key, mode, interval):
-        if mode == "hold":
-            self.controller.press(key)
-            self.stop_event.wait()  # 停止まで押しっぱなし
-            self.controller.release(key)
-        else:
-            while not self.stop_event.is_set():
+        try:
+            if mode == "hold":
                 self.controller.press(key)
+                self.stop_event.wait()  # 停止まで押しっぱなし
+            else:
+                while not self.stop_event.is_set():
+                    self.controller.press(key)
+                    self.controller.release(key)
+                    self.stop_event.wait(interval)
+        finally:
+            # 何があってもキーは必ず離す(押されっぱなしで固まるのを防ぐ)
+            try:
                 self.controller.release(key)
-                self.stop_event.wait(interval)
+            except Exception:
+                pass
 
     # 旧名の互換用
     on_close = quit_app
